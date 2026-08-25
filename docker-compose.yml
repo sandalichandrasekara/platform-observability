@@ -1,0 +1,96 @@
+services:
+  app:
+    build: ./app
+    container_name: demoapi
+    environment:
+      SERVICE_NAME: demoapi
+      PORT: "8080"
+      GENERATE_LOAD: "true"   
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    networks:
+      - obs
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+    networks:
+      - obs
+
+  loki:
+    image: grafana/loki:3.1.1
+    container_name: loki
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    ports:
+      - "3100:3100"
+    restart: unless-stopped
+    networks:
+      - obs
+
+  alloy:
+    image: grafana/alloy:v1.3.1
+    container_name: alloy
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy/data
+    ports:
+      - "12345:12345"
+    restart: unless-stopped
+    depends_on:
+      - loki
+    networks:
+      - obs
+
+  grafana:
+    image: grafana/grafana:11.1.4
+    container_name: grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_DEFAULT_THEME: dark
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboard.json:/var/lib/grafana/dashboards/dashboard.json:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - obs
+
+networks:
+  obs:
+    driver: bridge
+
+volumes:
+  prometheus-data:
+  loki-data:
+  alloy-data:
+  grafana-data:
