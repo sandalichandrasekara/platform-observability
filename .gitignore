@@ -1,0 +1,15 @@
+# Go build artifacts
+/app/demoapi
+*.exe
+*.test
+*.out
+
+# Local data / volumes (if bind-mounted)
+data/
+*.log
+
+# OS / editor cruft
+.DS_Store
+.idea/
+.vscode/
+*.swp
