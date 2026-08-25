@@ -1,0 +1,31 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'local'
+
+# Load alert rules from the mounted rules directory.
+rule_files:
+  - /etc/prometheus/alert-rules.yml
+
+scrape_configs:
+  # Prometheus scrapes itself.
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # The Go demo API exposes /metrics. In docker-compose the container is
+  # reachable by its service name. The `service` label mirrors the
+  # platform-monitoring convention so the same PromQL/alerts apply.
+  - job_name: 'demoapi'
+    static_configs:
+      - targets: ['app:8080']
+        labels:
+          service: 'demoapi'
+
+  # Scrape Grafana Alloy's own internal metrics.
+  - job_name: 'alloy'
+    static_configs:
+      - targets: ['alloy:12345']
+        labels:
+          service: 'alloy'
