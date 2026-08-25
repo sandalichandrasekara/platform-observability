@@ -18,11 +18,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-
 var serviceName = getenv("SERVICE_NAME", "demoapi")
 
 var (
-
 	httpRequestsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "http_requests_total",
@@ -30,7 +28,6 @@ var (
 		},
 		[]string{"method", "path", "status"},
 	)
-
 
 	httpRequestDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -89,7 +86,6 @@ func main() {
 	_ = srv.Shutdown(shutdownCtx)
 }
 
-
 func instrument(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
@@ -126,7 +122,6 @@ func instrument(next http.Handler) http.Handler {
 	})
 }
 
-
 type statusRecorder struct {
 	http.ResponseWriter
 	status int
@@ -136,7 +131,6 @@ func (r *statusRecorder) WriteHeader(code int) {
 	r.status = code
 	r.ResponseWriter.WriteHeader(code)
 }
-
 
 func routeLabel(path string) string {
 	switch path {
@@ -159,21 +153,19 @@ func handleHealthz(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-
 func handleWork(w http.ResponseWriter, r *http.Request) {
-	
+
 	base := time.Duration(20+rand.Intn(80)) * time.Millisecond
 	if rand.Float64() < 0.1 {
 		base += time.Duration(300+rand.Intn(700)) * time.Millisecond
 	}
 	time.Sleep(base)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"result":      "done",
-		"latency_ms":  base.Milliseconds(),
-		"work_units":  1 + rand.Intn(5),
+		"result":     "done",
+		"latency_ms": base.Milliseconds(),
+		"work_units": 1 + rand.Intn(5),
 	})
 }
-
 
 func handleError(w http.ResponseWriter, r *http.Request) {
 	if rand.Float64() < 0.35 {
@@ -189,7 +181,6 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
 }
-
 
 func generateLoad(ctx context.Context, addr string) {
 	client := &http.Client{Timeout: 5 * time.Second}
