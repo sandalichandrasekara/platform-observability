@@ -1,0 +1,63 @@
+groups:
+  # Recording rules pre-compute the expressions the dashboard and alerts reuse,
+  # following the same naming style as the platform-monitoring reference stack.
+  - name: application_recording_rules
+    interval: 15s
+    rules:
+      - record: service:http_requests:rate5m
+        expr: sum by (service) (rate(http_requests_total[5m]))
+
+      - record: service:http_errors:rate5m
+        expr: sum by (service) (rate(http_requests_total{status=~"5.."}[5m]))
+
+      - record: service:http_error_percent
+        expr: |
+          (service:http_errors:rate5m / service:http_requests:rate5m) * 100
+
+      - record: service:http_latency_p95
+        expr: |
+          histogram_quantile(0.95, sum by (le, service) (rate(http_request_duration_seconds_bucket[5m])))
+
+  - name: application_alerts
+    interval: 30s
+    rules:
+      # Fires when a service returns 5xx for more than 5% of requests.
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m])) by (service)
+            /
+            sum(rate(http_requests_total[5m])) by (service)
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate on {{ $labels.service }}"
+          description: "Service {{ $labels.service }} has {{ $value | humanizePercentage }} error rate over the last 5m."
+
+      # Fires when P95 latency exceeds 1s.
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service)
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High latency on {{ $labels.service }}"
+          description: "P95 latency is {{ $value | printf \"%.2f\" }}s on {{ $labels.service }}."
+
+  - name: monitoring_alerts
+    interval: 30s
+    rules:
+      # Any scrape target that stops responding.
+      - alert: TargetDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Target down: {{ $labels.job }}"
+          description: "Target {{ $labels.instance }} for job {{ $labels.job }} has been down for more than 1 minute."
