@@ -1,0 +1,90 @@
+// ============================================================
+// Grafana Alloy — log collection for the local demo stack.
+//
+// Alloy discovers running Docker containers, tails their stdout/stderr,
+// extracts the JSON "level" field into a Loki label, and ships everything
+// to Loki. This mirrors the label conventions (service, level, container)
+// used by the platform-monitoring reference stack.
+// ============================================================
+
+// Talk to the Docker daemon (the socket is mounted into the container).
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+// Turn Docker container metadata into useful Loki labels.
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+
+  // Static cluster label so queries look the same as in the k8s stack.
+  rule {
+    target_label = "cluster"
+    replacement  = "local"
+  }
+
+  // Container name (Docker prefixes it with "/").
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  // Use the compose service label as the "service" label when present,
+  // falling back to the container name.
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+
+  // Drop Alloy's own logs to avoid a noisy feedback loop.
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    regex         = "alloy"
+    action        = "drop"
+  }
+}
+
+// Tail container logs and forward them to the processing stage.
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.containers.output
+  forward_to = [loki.process.logs.receiver]
+  labels     = { job = "docker" }
+}
+
+// Parse JSON application logs and promote the level to a label.
+loki.process "logs" {
+  // Extract the "level" field from JSON log lines (non-JSON lines pass through).
+  stage.json {
+    expressions = {
+      level = "level",
+    }
+  }
+
+  // Normalize slog's upper-case levels (INFO/WARN/ERROR) for consistent labels.
+  stage.template {
+    source   = "level"
+    template = "{{ ToLower .Value }}"
+  }
+
+  stage.labels {
+    values = {
+      level = "",
+    }
+  }
+
+  forward_to = [loki.write.default.receiver]
+}
+
+// Ship processed logs to Loki.
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
+
+// Expose Alloy's own UI/metrics on :12345 (scraped by Prometheus).
+logging {
+  level  = "info"
+  format = "logfmt"
+}
