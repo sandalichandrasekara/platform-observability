@@ -1,4 +1,4 @@
-# platform-observability
+# Platform Observability
 
 A minimal, self-contained observability project that demonstrates **collecting,
 visualizing, and investigating application telemetry** with a modern Grafana
